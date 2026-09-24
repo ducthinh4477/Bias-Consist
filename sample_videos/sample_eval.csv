@@ -1,0 +1,5 @@
+input,avg_p_fake,median_p_fake
+video_real_01.mp4,0.08,0.05
+video_real_02.mp4,0.15,0.12
+video_fake_01.mp4,0.92,0.95
+video_fake_02.mp4,0.88,0.89

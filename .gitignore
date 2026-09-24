@@ -1,0 +1,57 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches and Temporary Files
+.cache/
+.gradio/
+/tmp/
+*.tmp
+*.temp
+
+# Model Weights and Checkpoints (Strictly excluded to maintain repo under GitHub size limits)
+/weights/
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.onnx
+
+# Outputs and Experiments
+/outputs/
+/runs/
+/logs/
+*.log
+
+# Full datasets (sample_videos/ is kept for smoke tests and demos)
+/datasets/
+
+# Scratch & Temporary Testing Scripts
+/scratch/
+x.py
+y.py
+z.py
+
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
