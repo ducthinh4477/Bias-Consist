@@ -106,8 +106,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "auc_info_p1": "- You are processing **{count} video(s)**, all having ground-truth label **{cls}**.",
         "auc_info_p2": "- By statistical definition, AUROC measures separation between two distributions (Real vs Fake). Therefore, calculating Video AUC requires **at least 1 Real video and 1 Fake video**.",
         "auc_info_p3": "- **To view Video AUC:** Upload or provide a folder containing both Real and Fake videos (or run `python evaluate_video_auc.py`).",
-        "table_summary_row": "[VIDEO AUC SUMMARY]",
-        "table_info_row": "[VIDEO AUC INFO]",
+        "table_summary_row": "🎯 [VIDEO AUC SUMMARY]",
+        "table_info_row": "ℹ️ [VIDEO AUC INFO]",
         "correct": "CORRECT",
         "incorrect": "INCORRECT",
         "unknown": "UNKNOWN",
@@ -161,8 +161,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "auc_info_p1": "- Bạn đang xử lý **{count} video**, tất cả đều thuộc nhãn **{cls}**.",
         "auc_info_p2": "- Theo định nghĩa thống kê học máy, AUROC đo lường độ phân tách giữa 2 phân phối (Real vs Fake). Do đó bắt buộc cần **ít nhất 1 video Real và 1 video Fake** để tính được chỉ số AUC.",
         "auc_info_p3": "- **Cách xem Video AUC:** Hãy tải lên hoặc chọn thư mục chứa cả video Real & Fake (hoặc chạy lệnh `python evaluate_video_auc.py`).",
-        "table_summary_row": "[TỔNG KẾT VIDEO AUC]",
-        "table_info_row": "[THÔNG TIN VIDEO AUC]",
+        "table_summary_row": "🎯 [TỔNG KẾT VIDEO AUC]",
+        "table_info_row": "ℹ️ [THÔNG TIN VIDEO AUC]",
         "correct": "ĐÚNG",
         "incorrect": "SAI",
         "unknown": "CHƯA RÕ",
@@ -1345,22 +1345,20 @@ input:focus, textarea:focus, select:focus {
     border-color: #CBD5E1 !important;
 }
 
-/* Modern Dataframe / Table: Full horizontal scroll without header truncation */
-.modern-table {
+/* Modern Dataframe / Table: Single clean horizontal scrollbar, no double scrollbar */
+.modern-table,
+.gradio-dataframe {
     border: 1px solid #E2E8F0 !important;
     border-radius: 10px !important;
     background: #FFFFFF !important;
-    overflow-x: auto !important;
+    overflow-x: hidden !important;
     max-width: 100% !important;
 }
 
-/* Enable smooth horizontal scrolling on all Gradio dataframe wrapper levels */
-.dataframe-wrap,
-.table-wrap,
-.table-container,
+/* Ẩn bớt thanh cuộn lồng nhau của Gradio Dataframe, chỉ cuộn ở lớp table-wrap */
 .modern-table .table-wrap,
-.modern-table .dataframe-wrap,
-.modern-table .table-container {
+.gradio-dataframe .table-wrap,
+.dataframe-wrap {
     overflow-x: auto !important;
     max-width: 100% !important;
     scrollbar-width: thin !important;
@@ -1422,6 +1420,28 @@ th:first-child, td:first-child,
 
 .modern-table tr:hover td {
     background-color: #F8FAFC !important;
+}
+
+/* Làm nổi bật dòng tổng kết [VIDEO AUC SUMMARY] ở cuối bảng */
+.modern-table tbody tr:last-child td,
+.gradio-dataframe tbody tr:last-child td {
+    background-color: #EEF2FF !important;
+    color: #312E81 !important;
+    font-weight: 700 !important;
+    border-top: 2px solid #C7D2FE !important;
+    border-bottom: 2px solid #C7D2FE !important;
+}
+
+.modern-table tbody tr:last-child:hover td,
+.gradio-dataframe tbody tr:last-child:hover td {
+    background-color: #E0E7FF !important;
+}
+
+.modern-table tbody tr:last-child td:first-child,
+.gradio-dataframe tbody tr:last-child td:first-child {
+    color: #4338CA !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.02em !important;
 }
 """
 
@@ -1552,7 +1572,7 @@ def build_ui():
                 gr.update(label=t["forada_ckpt_label"]),
                 gr.update(label=t["local_ckpt_label"]),
                 gr.update(label=t["upload_label"]),
-                gr.update(label=t["advanced_settings"]),
+                gr.update(label=t["advanced_settings"], open=False),
                 gr.update(label=t["face_thresh_label"]),
                 gr.update(label=t["scale_label"]),
                 gr.update(label=t["target_size_label"]),

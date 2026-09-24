@@ -34,10 +34,28 @@ git clone https://github.com/ducthinh4477/Bias-Consist.git
 cd Bias-Consist
 ```
 
-### 2. Cài đặt môi trường & thư viện
-```bash
-pip install -r requirements.txt
-```
+### 2. Thiết lập môi trường ảo BiasC (BẮT BUỘC)
+Dự án được tối ưu và yêu cầu chạy trong môi trường ảo **`BiasC`** để đảm bảo tương thích các phiên bản PyTorch, CLIP, Transformers và Gradio:
+
+* **Sử dụng Conda (Khuyên dùng):**
+  ```bash
+  conda create -n BiasC python=3.10 -y
+  conda activate BiasC
+  ```
+
+* **Hoặc sử dụng `venv`:**
+  ```bash
+  python -m venv BiasC
+  # Trên Windows:
+  BiasC\Scripts\activate
+  # Trên Linux / macOS:
+  source BiasC/bin/activate
+  ```
+
+* **Cài đặt danh sách thư viện phụ thuộc:**
+  ```bash
+  pip install -r requirements.txt
+  ```
 
 ### 3. Chạy bộ kiểm thử tự động (Smoke Test)
 Kiểm tra tính toàn vẹn của PyTorch, RetinaFace phát hiện khuôn mặt, tính toán chỉ số Video AUROC/EER và khởi tạo giao diện Web:
@@ -68,7 +86,7 @@ Mở trình duyệt truy cập: 👉 **`http://localhost:7860/`** (hoặc `http:
 | **Effort** | CLIP ViT-L/14 | Residual Adapter Tuning | `weights/Effort/effort_clip_L14_trainOn_FaceForensic.pth` |
 | **ForAda** | CLIP ViT-L/14 | Frequency-domain Cross-Attention Adaptation | `weights/ForAda/forada_checkpoint.pth` |
 
-> 💡 **Mẹo:** Mô hình **GenD** được tích hợp tự động nạp từ Hugging Face, bạn có thể chọn ngay `GenD` trên Web App để kiểm tra suy luận trên video/ảnh thực tế ngay cả khi chưa tải file checkpoint cục bộ của các mô hình khác.
+> 💡 **Mẹo:** Mô hình đối chuẩn chính **GenD (CLIP ViT-L/14)** đã được tích hợp trọn vẹn cả mã nguồn kiến trúc tại `src/model/gend/` và cơ chế tự động nạp trọng số từ Hugging Face. Người dùng có thể chọn ngay `GenD` trên Web App để kiểm tra suy luận trên video/ảnh thực tế ngay lập tức.
 
 ### Cấu trúc thư mục trọng số (khi bổ sung thêm checkpoint thủ công):
 ```text
@@ -86,7 +104,7 @@ weights/
 ## 📊 Bảng Hiệu Năng So Sánh Đối Chuẩn
 
 | Phương pháp | In-domain FF++ (c40) | Cross-dataset DFD | Cross-method DF40 | Trainable Params |
-| :--- | :---: | :---: | :---: | :---: |
+| :--- | :---: | :---: | :--- | :---: |
 | **BiasConsist (Ours)** | **99.1%** | **97.9%** | **96.8%** | **~0.27M (<0.1%)** |
 | GenD | 98.9% | 97.0% | 95.7% | ~0.08M |
 | ForAda | 96.8% | 94.2% | 93.6% | ~12.5M |
@@ -103,9 +121,13 @@ Bias-Consist/
 ├── src/
 │   ├── model/
 │   │   ├── BiasConsistency.py  # Kiến trúc mô hình BiasConsist
-│   │   ├── Effort.py           # Mô hình Effort
-│   │   ├── ForAda.py           # Mô hình ForAda
-│   │   └── GenD.py             # Mô hình GenD
+│   │   ├── gend/               # Kiến trúc mô hình GenD CLIP đối chuẩn (WACV 2026)
+│   │   │   ├── modeling_gend.py
+│   │   │   ├── config.json
+│   │   │   └── model_index.json
+│   │   ├── effort/             # Mô hình Effort
+│   │   ├── forada/             # Mô hình ForAda
+│   │   └── fsfm/               # Mô hình FSFM
 │   ├── metrics.py              # Thư viện tính Video AUROC & EER
 │   └── retinaface.py           # Module phát hiện và căn chỉnh khuôn mặt RetinaFace
 ├── config/

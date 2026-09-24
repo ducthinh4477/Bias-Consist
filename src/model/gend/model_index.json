@@ -1,0 +1,6 @@
+{
+  "auto_map": {
+    "AutoModel": "modeling_gend.GenD",
+    "AutoConfig": "modeling_gend.GenDConfig"
+  }
+}
