@@ -9,7 +9,7 @@
 
 ---
 
-## 📌 Giới thiệu
+## Giới thiệu
 
 Kho lưu trữ này cung cấp mã nguồn chính thức cho dự án **BiasConsist** (*Consistency-Guided Bias Tuning for Deepfake Detection*), bao gồm:
 1. **Nền tảng Thử nghiệm Trực quan (Interactive Web Demo)** chạy bằng Gradio với giao diện SaaS chuẩn Dashboard hai cột, hỗ trợ song ngữ (EN / VI), preview đối chiếu song song và thanh cuộn bảng thông số chi tiết.
@@ -24,7 +24,7 @@ Kho lưu trữ này cung cấp mã nguồn chính thức cho dự án **BiasCons
 
 ---
 
-## ⚡ Hướng dẫn Bắt đầu Nhanh (Quick Start)
+## Hướng dẫn Bắt đầu Nhanh (Quick Start)
 
 Mã nguồn được thiết kế để bất kỳ ai clone về cũng có thể **chạy kiểm thử ngay lập tức (out-of-the-box)** mà không gặp lỗi thiếu thư viện hay lỗi phụ thuộc đường dẫn tuyệt đối.
 
@@ -77,7 +77,7 @@ Mở trình duyệt truy cập: 👉 **`http://localhost:7860/`** (hoặc `http:
 
 ---
 
-## 🔬 Các Mô hình Tích hợp & Checkpoint Trọng số
+## Các Mô hình Tích hợp & Checkpoint Trọng số
 
 | Phương pháp | Backbone | Kỹ thuật Tinh chỉnh | Cơ chế Checkpoint |
 | :--- | :---: | :--- | :--- |
@@ -85,8 +85,6 @@ Mở trình duyệt truy cập: 👉 **`http://localhost:7860/`** (hoặc `http:
 | **GenD** *(WACV 2026)* | CLIP ViT-L/14 | Parameter-efficient LayerNorm Adaptation | **Tự động tải từ Hugging Face** (`yermandy/GenD_CLIP_L_14`) |
 | **Effort** | CLIP ViT-L/14 | Residual Adapter Tuning | `weights/Effort/effort_clip_L14_trainOn_FaceForensic.pth` |
 | **ForAda** | CLIP ViT-L/14 | Frequency-domain Cross-Attention Adaptation | `weights/ForAda/forada_checkpoint.pth` |
-
-> 💡 **Mẹo:** Mô hình đối chuẩn chính **GenD (CLIP ViT-L/14)** đã được tích hợp trọn vẹn cả mã nguồn kiến trúc tại `src/model/gend/` và cơ chế tự động nạp trọng số từ Hugging Face. Người dùng có thể chọn ngay `GenD` trên Web App để kiểm tra suy luận trên video/ảnh thực tế ngay lập tức.
 
 ### Cấu trúc thư mục trọng số (khi bổ sung thêm checkpoint thủ công):
 ```text
@@ -101,7 +99,7 @@ weights/
 
 ---
 
-## 📊 Bảng Hiệu Năng So Sánh Đối Chuẩn
+## Bảng Hiệu Năng So Sánh Đối Chuẩn
 
 | Phương pháp | In-domain FF++ (c40) | Cross-dataset DFD | Cross-method DF40 | Trainable Params |
 | :--- | :---: | :---: | :--- | :---: |
@@ -112,42 +110,8 @@ weights/
 
 ---
 
-## 📁 Cấu trúc Thư mục
 
-```text
-Bias-Consist/
-├── app/
-│   └── run.py                  # Mã nguồn giao diện Web App Gradio (Dashboard SaaS)
-├── src/
-│   ├── model/
-│   │   ├── BiasConsistency.py  # Kiến trúc mô hình BiasConsist
-│   │   ├── gend/               # Kiến trúc mô hình GenD CLIP đối chuẩn (WACV 2026)
-│   │   │   ├── modeling_gend.py
-│   │   │   ├── config.json
-│   │   │   └── model_index.json
-│   │   ├── effort/             # Mô hình Effort
-│   │   ├── forada/             # Mô hình ForAda
-│   │   └── fsfm/               # Mô hình FSFM
-│   ├── metrics.py              # Thư viện tính Video AUROC & EER
-│   └── retinaface.py           # Module phát hiện và căn chỉnh khuôn mặt RetinaFace
-├── config/
-│   └── datasets/               # Cấu hình danh sách tập dữ liệu kiểm thử
-├── sample_videos/              # Video mẫu phục vụ kiểm thử nhanh (Real & Fake)
-│   ├── real_face_sample.mp4
-│   ├── fake_face_sample.mp4
-│   └── sample_eval.csv
-├── evaluate_video_auc.py       # Script CLI tính Video AUROC & EER từ CSV
-├── detector.py                 # Tiện ích tiền xử lý và cắt khuôn mặt hàng loạt
-├── test_quick.py               # Bộ kiểm thử tự động (Smoke Test)
-├── BiasConsist.pdf             # Bài báo khoa học BiasConsist
-├── requirements.txt            # Danh sách thư viện phụ thuộc
-├── .gitignore                  # Cấu hình bỏ qua tệp nhị phân lớn và bộ nhớ đệm
-└── README.md                   # Tài liệu hướng dẫn sử dụng
-```
-
----
-
-## 📖 Trích dẫn (Citation)
+## Trích dẫn 
 
 Nếu bạn sử dụng mã nguồn hoặc phương pháp BiasConsist trong nghiên cứu, vui lòng trích dẫn:
 
@@ -162,6 +126,6 @@ Nếu bạn sử dụng mã nguồn hoặc phương pháp BiasConsist trong nghi
 
 ---
 
-## 📄 Bản quyền (License)
+## Bản quyền
 
 Dự án được phân phối dưới giấy phép **MIT License**. Chi tiết xem tại tệp [LICENSE](LICENSE).

@@ -1,14 +1,31 @@
 import os
-
-# set GRADIO_TEMP_DIR
-os.environ["GRADIO_TEMP_DIR"] = "./tmp/gradio"
-
-
 import shutil
 import sys
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+# Đảm bảo đường dẫn gốc của dự án được thêm vào sys.path và thiết lập làm thư mục làm việc hiện tại
+THIS = Path(__file__).resolve()
+ROOT = THIS.parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
+
+# Đảm bảo terminal console trên Windows hiển thị đúng bảng mã UTF-8 tiếng Việt
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+# Thiết lập thư mục tạm thời cho Gradio
+os.environ["GRADIO_TEMP_DIR"] = "./tmp/gradio"
 
 import cv2
 import gradio as gr
@@ -18,15 +35,6 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-
-# Ensure project root on sys.path
-try:
-    import autorootcwd
-except Exception:
-    THIS = Path(__file__).resolve()
-    ROOT = THIS.parents[1]
-    if str(ROOT) not in sys.path:
-        sys.path.insert(0, str(ROOT))
 
 from detector import align_face
 from src.config import Config
@@ -38,7 +46,7 @@ from src.model.ForAda import ForAda
 from src.model.GenD import GenD as GenD_Train
 from src.retinaface import RetinaFace, prepare_model
 
-# Constants
+# Các hằng số hệ thống
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -49,6 +57,8 @@ DEFAULT_FORADA_CKPT = "weights/ForAda/forada_checkpoint.pth"
 DEFAULT_GEND_ID = "yermandy/GenD_CLIP_L_14"
 GEND_MODELS = ["GenD (CLIP-ViT-L/14)"]
 OUTPUT_DIR = Path("outputs/tmp/gradio_app")
+
+# Tên biến / cột bảng dữ liệu (giữ nguyên tên biến kỹ thuật theo yêu cầu)
 TABLE_HEADERS = [
     "input",
     "num_frames",
@@ -60,134 +70,197 @@ TABLE_HEADERS = [
     "result",
 ]
 
-TRANSLATIONS: Dict[str, Dict[str, str]] = {
-    "English": {
-        "app_title": "BiasConsist",
-        "app_badge": "Benchmark",
-        "app_subtitle": "Multi-Model Deepfake Detection & Comparative Evaluation Platform",
-        "language_label": "Language",
-        "sidebar_config_title": "Configuration",
-        "model_source_label": "Model Architecture",
-        "bias_ckpt_label": "BiasConsist Checkpoint Path",
-        "gend_model_label": "GenD Model Architecture",
-        "effort_ckpt_label": "Effort Checkpoint Path",
-        "forada_ckpt_label": "ForAda Checkpoint Path",
-        "local_ckpt_label": "Local Checkpoint Path",
-        "upload_label": "Upload Media (MP4, AVI, MOV, MKV, JPG, PNG, WEBP)",
-        "advanced_settings": "Advanced Detection Settings",
-        "face_thresh_label": "Face Detection Threshold",
-        "scale_label": "Face Alignment Crop Scale",
-        "target_size_label": "Target Face Size (px, -1 for original)",
-        "stride_label": "Video Frame Stride",
-        "max_frames_label": "Max Frames per Video (-1 for all)",
-        "max_faces_label": "Max Faces per Frame",
-        "run_btn": "Run Detection",
-        "status_ready": "**System Status: Ready** — Select a model, upload media files, and click **Run Detection**.",
-        "status_loading_model": "**System Status: Loading Model** — Initializing model weights and feature extractor...",
-        "status_loading_detector": "**System Status: Initializing Detector** — Loading RetinaFace detector...",
-        "status_collecting_inputs": "**System Status: Parsing Inputs** — Scanning media files...",
-        "status_no_inputs": "**System Status: Notice** — No valid input media files found.",
-        "status_calculating_progress": "**System Status: Preparing Frames** — Calculating total video frames...",
-        "status_starting_inference": "**System Status: Processing** — Running deepfake inference...",
-        "status_complete": "**System Status: Completed** — Evaluation and video AUROC metrics ready.",
-        "progress_desc": "Processing frames ({current}/{total})",
-        "input_preview_label": "Input Media Preview",
-        "output_preview_label": "Annotated Output Preview",
-        "results_title": "Detection Results & Video AUROC Evaluation",
-        "copy_btn": "Copy Table",
-        "export_btn": "Export CSV",
-        "summary_overview": "**Overview:** {count} files processed | **Avg Fake:** `{avg:.4f}` | **Median Fake:** `{med:.4f}`",
-        "auc_title": "### Video AUROC & EER Metrics:",
-        "auc_mean": "- **Video AUC (Mean Aggregation):** `{auc:.4f}` ({pct:.2f}%)",
-        "auc_median": "- **Video AUC (Median Aggregation):** `{auc:.4f}` ({pct:.2f}%)",
-        "eer_text": "- **Video EER (Equal Error Rate):** `{eer:.4f}` ({pct:.2f}%)",
-        "auc_details": "- **Details:** Evaluated on {count} videos with inferred ground-truth ({real} Real, {fake} Fake)",
-        "auc_info_title": "### Video AUROC Information:",
-        "auc_info_p1": "- You are processing **{count} video(s)**, all having ground-truth label **{cls}**.",
-        "auc_info_p2": "- By statistical definition, AUROC measures separation between two distributions (Real vs Fake). Therefore, calculating Video AUC requires **at least 1 Real video and 1 Fake video**.",
-        "auc_info_p3": "- **To view Video AUC:** Upload or provide a folder containing both Real and Fake videos (or run `python evaluate_video_auc.py`).",
-        "table_summary_row": "🎯 [VIDEO AUC SUMMARY]",
-        "table_info_row": "ℹ️ [VIDEO AUC INFO]",
-        "correct": "CORRECT",
-        "incorrect": "INCORRECT",
-        "unknown": "UNKNOWN",
-        "need_two_classes": "Need >= 2 classes",
-        "real_and_fake": "Real & Fake",
-        "current_has": "Current: {cls}",
-        "need_rf": "Need Real+Fake",
+# Thông tin trọng số mô hình và cơ chế tự động tìm nạp / tải về
+WEIGHTS_INFO = {
+    "buffalo_l": {
+        "path": "weights/models/buffalo_l/det_10g.onnx",
+        "name": "RetinaFace (det_10g.onnx)",
+        "url": "https://huggingface.co/datasets/theanhntp/Liblib/resolve/ae4357741af379482690fe3e0f2fa6fd32ba33b4/insightface/models/buffalo_l/det_10g.onnx",
+        "alt_paths": [
+            "C:/GitHub/BiasConsist/weights/models/buffalo_l/det_10g.onnx",
+            "../BiasConsist/weights/models/buffalo_l/det_10g.onnx",
+        ],
     },
-    "Tiếng Việt": {
-        "app_title": "BiasConsist",
-        "app_badge": "Nền tảng Đánh giá",
-        "app_subtitle": "Hệ thống Phát hiện & So sánh Đối chuẩn Mô hình Deepfake",
-        "language_label": "Ngôn ngữ",
-        "sidebar_config_title": "Cấu hình phân tích",
-        "model_source_label": "Kiến trúc mô hình",
-        "bias_ckpt_label": "Đường dẫn Checkpoint BiasConsist",
-        "gend_model_label": "Kiến trúc mô hình GenD",
-        "effort_ckpt_label": "Đường dẫn Checkpoint Effort",
-        "forada_ckpt_label": "Đường dẫn Checkpoint ForAda",
-        "local_ckpt_label": "Đường dẫn Checkpoint cục bộ",
-        "upload_label": "Tải tệp đa phương tiện (MP4, AVI, MOV, MKV, JPG, PNG, WEBP)",
-        "advanced_settings": "Cài đặt phát hiện nâng cao",
-        "face_thresh_label": "Ngưỡng phát hiện khuôn mặt",
-        "scale_label": "Tỉ lệ cắt viền khuôn mặt",
-        "target_size_label": "Kích thước khuôn mặt (px, -1 để giữ nguyên)",
-        "stride_label": "Bước nhảy khung hình video (stride)",
-        "max_frames_label": "Số khung hình tối đa mỗi video (-1 là tất cả)",
-        "max_faces_label": "Số khuôn mặt tối đa mỗi khung hình",
-        "run_btn": "Bắt đầu phát hiện",
-        "status_ready": "**Trạng thái hệ thống: Sẵn sàng** — Chọn mô hình, tải tệp cần kiểm tra và nhấn **Bắt đầu phát hiện**.",
-        "status_loading_model": "**Trạng thái hệ thống: Đang tải mô hình** — Khởi tạo trọng số và bộ trích xuất đặc trưng...",
-        "status_loading_detector": "**Trạng thái hệ thống: Khởi tạo detector** — Đang nạp mô hình RetinaFace...",
-        "status_collecting_inputs": "**Trạng thái hệ thống: Thu thập tệp đầu vào** — Đang quét danh sách tệp...",
-        "status_no_inputs": "**Trạng thái hệ thống: Chú ý** — Không tìm thấy tệp đầu vào hợp lệ.",
-        "status_calculating_progress": "**Trạng thái hệ thống: Chuẩn bị khung hình** — Đang tính toán tổng số frame...",
-        "status_starting_inference": "**Trạng thái hệ thống: Đang xử lý** — Bắt đầu phân tích phát hiện deepfake...",
-        "status_complete": "**Trạng thái hệ thống: Hoàn thành** — Đã tính toán xong kết quả và chỉ số Video AUROC.",
-        "progress_desc": "Đang xử lý khung hình ({current}/{total})",
-        "input_preview_label": "Xem trước tệp đầu vào",
-        "output_preview_label": "Xem trước kết quả gắn nhãn",
-        "results_title": "Kết quả phát hiện & Đánh giá Video AUROC",
-        "copy_btn": "Sao chép bảng",
-        "export_btn": "Xuất CSV",
-        "summary_overview": "**Tổng quan:** {count} tệp đã xử lý | **Avg Fake:** `{avg:.4f}` | **Median Fake:** `{med:.4f}`",
-        "auc_title": "### Chỉ số Video AUROC & EER:",
-        "auc_mean": "- **Video AUC (Mean Aggregation):** `{auc:.4f}` ({pct:.2f}%)",
-        "auc_median": "- **Video AUC (Median Aggregation):** `{auc:.4f}` ({pct:.2f}%)",
-        "eer_text": "- **Video EER (Equal Error Rate):** `{eer:.4f}` ({pct:.2f}%)",
-        "auc_details": "- **Chi tiết:** Tính trên {count} video nhận diện được nhãn ({real} Real, {fake} Fake)",
-        "auc_info_title": "### Thông tin về Video AUROC:",
-        "auc_info_p1": "- Bạn đang xử lý **{count} video**, tất cả đều thuộc nhãn **{cls}**.",
-        "auc_info_p2": "- Theo định nghĩa thống kê học máy, AUROC đo lường độ phân tách giữa 2 phân phối (Real vs Fake). Do đó bắt buộc cần **ít nhất 1 video Real và 1 video Fake** để tính được chỉ số AUC.",
-        "auc_info_p3": "- **Cách xem Video AUC:** Hãy tải lên hoặc chọn thư mục chứa cả video Real & Fake (hoặc chạy lệnh `python evaluate_video_auc.py`).",
-        "table_summary_row": "🎯 [TỔNG KẾT VIDEO AUC]",
-        "table_info_row": "ℹ️ [THÔNG TIN VIDEO AUC]",
-        "correct": "ĐÚNG",
-        "incorrect": "SAI",
-        "unknown": "CHƯA RÕ",
-        "need_two_classes": "Cần >= 2 lớp",
-        "real_and_fake": "Real & Fake",
-        "current_has": "Đang có: {cls}",
-        "need_rf": "Cần Real+Fake",
+    "BiasConsist": {
+        "path": DEFAULT_BIAS_CKPT,
+        "name": "BiasConsist (bias_consistency.pth)",
+        "url": None,
+        "alt_paths": [
+            "C:/GitHub/BiasConsist/weights/BiasConsist/bias_consistency.pth",
+            "../BiasConsist/weights/BiasConsist/bias_consistency.pth",
+        ],
+    },
+    "Effort": {
+        "path": DEFAULT_EFFORT_CKPT,
+        "name": "Effort (effort_clip_L14_trainOn_FaceForensic.pth)",
+        "url": None,
+        "alt_paths": [
+            "C:/GitHub/BiasConsist/weights/Effort/effort_clip_L14_trainOn_FaceForensic.pth",
+            "../BiasConsist/weights/Effort/effort_clip_L14_trainOn_FaceForensic.pth",
+        ],
+    },
+    "ForAda": {
+        "path": DEFAULT_FORADA_CKPT,
+        "name": "ForAda (forada_checkpoint.pth)",
+        "url": "https://drive.usercontent.google.com/download?id=1UlaAUTtsX87ofIibf38TtfAKIsnA7WVm&export=download&authuser=0",
+        "alt_paths": [
+            "C:/GitHub/BiasConsist/weights/ForAda/forada_checkpoint.pth",
+            "../BiasConsist/weights/ForAda/forada_checkpoint.pth",
+        ],
+    },
+    "forensics_adapter": {
+        "path": "weights/forensics_adapter/ViT-L-14.pt",
+        "name": "ForAda Backbone (ViT-L-14.pt)",
+        "url": "https://openaipublic.azureedge.net/clip/models/b8cca3fd41ae0c99ba7e8951adf17d267cdb84cd88be6f7c2e0eca1737a03836/ViT-L-14.pt",
+        "alt_paths": [
+            "C:/GitHub/BiasConsist/weights/forensics_adapter/ViT-L-14.pt",
+            "../BiasConsist/weights/forensics_adapter/ViT-L-14.pt",
+        ],
     },
 }
 
-TRANSLATIONS["EN"] = TRANSLATIONS["English"]
-TRANSLATIONS["VI"] = TRANSLATIONS["Tiếng Việt"]
+
+def ensure_weight(key: str, verbose: bool = True) -> bool:
+    """Kiểm tra và tự động liên kết / tải trọng số cho mô hình."""
+    info = WEIGHTS_INFO.get(key)
+    if not info:
+        return True
+
+    target_path = Path(info["path"])
+    name = info["name"]
+
+    if target_path.is_file() and target_path.stat().st_size > 0:
+        if verbose:
+            size_mb = target_path.stat().st_size / (1024 * 1024)
+            print(f"  ✓ [{name}] Đã sẵn sàng ({size_mb:.1f} MB)")
+        return True
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 1. Tìm trong các thư mục cục bộ thay thế
+    for alt in info.get("alt_paths", []):
+        alt_path = Path(alt)
+        if alt_path.is_file() and alt_path.stat().st_size > 0:
+            if verbose:
+                print(f"  ⚡ [{name}] Tìm thấy tại '{alt}', đang liên kết...")
+            try:
+                os.link(str(alt_path), str(target_path))
+                if verbose:
+                    print(f"  ✓ [{name}] Đã tạo hardlink thành công!")
+                return True
+            except Exception:
+                try:
+                    shutil.copy2(str(alt_path), str(target_path))
+                    if verbose:
+                        print(f"  ✓ [{name}] Đã sao chép thành công!")
+                    return True
+                except Exception as ce:
+                    if verbose:
+                        print(f"  ⚠ Không thể sao chép từ '{alt}': {ce}")
+
+    # 2. Tải trực tuyến nếu có URL
+    url = info.get("url")
+    if url:
+        if verbose:
+            print(f"  ⬇ [{name}] Đang tải tự động từ: {url} ...")
+        try:
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req) as resp, open(target_path, "wb") as out_f:
+                total_size = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                chunk_size = 1024 * 1024  # 1MB
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    out_f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0 and verbose:
+                        pct = (downloaded / total_size) * 100
+                        print(
+                            f"\r     Tiến độ: {downloaded / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({pct:.1f}%)",
+                            end="",
+                            flush=True,
+                        )
+            if verbose:
+                print(f"\n  ✓ [{name}] Tải xuống hoàn tất thành công!")
+            return True
+        except Exception as e:
+            if target_path.exists():
+                try:
+                    target_path.unlink()
+                except Exception:
+                    pass
+            if verbose:
+                print(f"\n  ✗ [{name}] Lỗi khi tải trực tuyến: {e}")
+
+    return False
+
+
+def check_and_download_all_weights():
+    """Tự động kiểm tra và tải trước toàn bộ trọng số khi ứng dụng khởi chạy."""
+    print("=" * 65)
+    print("  BiasConsist: Tự động kiểm tra & Chuẩn bị trọng số mô hình")
+    print("=" * 65)
+    for key in WEIGHTS_INFO:
+        ensure_weight(key, verbose=True)
+    print("  ✓ [GenD] Tự động nạp qua HuggingFace Hub ('yermandy/GenD_CLIP_L_14')")
+    print("=" * 65)
+
+
+# Toàn bộ nhãn giao diện và thông báo người dùng bằng Tiếng Việt
+UI_TEXT = {
+    "app_title": "BiasConsist",
+    "app_badge": "Benchmark",
+    "app_subtitle": "Nền tảng Phát hiện Deepfake & Đánh giá Đối chuẩn Đa Mô hình",
+    "sidebar_config_title": "Cấu hình phân tích",
+    "model_source_label": "Kiến trúc mô hình",
+    "bias_ckpt_label": "Đường dẫn Checkpoint BiasConsist",
+    "gend_model_label": "Kiến trúc mô hình GenD",
+    "effort_ckpt_label": "Đường dẫn Checkpoint Effort",
+    "forada_ckpt_label": "Đường dẫn Checkpoint ForAda",
+    "local_ckpt_label": "Đường dẫn Checkpoint cục bộ",
+    "upload_label": "Tải tệp media (MP4, AVI, MOV, MKV, JPG, PNG, WEBP)",
+    "advanced_settings": "Cài đặt phát hiện nâng cao",
+    "face_thresh_label": "Ngưỡng phát hiện khuôn mặt (Threshold)",
+    "scale_label": "Tỉ lệ cắt viền khuôn mặt (Scale)",
+    "target_size_label": "Kích thước khuôn mặt mục tiêu (px, -1 để giữ nguyên)",
+    "stride_label": "Bước nhảy khung hình video (Stride)",
+    "max_frames_label": "Số khung hình tối đa mỗi video (-1 là tất cả)",
+    "max_faces_label": "Số khuôn mặt tối đa mỗi khung hình",
+    "run_btn": "Bắt đầu phát hiện",
+    "status_ready": "**Trạng thái hệ thống: Sẵn sàng** — Chọn mô hình, tải tệp media cần kiểm tra và nhấn **Bắt đầu phát hiện**.",
+    "status_loading_model": "**Trạng thái hệ thống: Đang tải mô hình** — Khởi tạo trọng số và bộ trích xuất đặc trưng...",
+    "status_loading_detector": "**Trạng thái hệ thống: Khởi tạo detector** — Đang nạp mô hình RetinaFace...",
+    "status_collecting_inputs": "**Trạng thái hệ thống: Thu thập tệp đầu vào** — Đang quét danh sách tệp media...",
+    "status_no_inputs": "**Trạng thái hệ thống: Chú ý** — Không tìm thấy tệp media đầu vào hợp lệ.",
+    "status_calculating_progress": "**Trạng thái hệ thống: Chuẩn bị khung hình** — Đang tính toán tổng số frame...",
+    "status_starting_inference": "**Trạng thái hệ thống: Đang xử lý** — Bắt đầu phân tích phát hiện deepfake...",
+    "status_complete": "**Trạng thái hệ thống: Hoàn thành**",
+    "progress_desc": "Đang xử lý khung hình ({current}/{total})",
+    "input_preview_label": "Xem trước media đầu vào",
+    "output_preview_label": "Xem trước kết quả gắn nhãn",
+    "results_title": "Kết quả phát hiện",
+    "copy_btn": "Sao chép bảng",
+    "export_btn": "Xuất CSV",
+    "correct": "ĐÚNG",
+    "incorrect": "SAI",
+    "unknown": "CHƯA RÕ",
+}
 
 torch.set_float32_matmul_precision("high")
 
 
 class DeepfakeDetector:
-    """Handles model loading, caching, and inference for deepfake detection."""
+    """Quản lý việc nạp mô hình, lưu đệm và thực hiện suy luận phát hiện deepfake."""
 
     def __init__(self):
         self.model_cache: Dict[str, Dict] = {}
         self.detector_cache: Dict[float, RetinaFace] = {}
 
     def _get_dtype(self, precision: str) -> torch.dtype:
-        """Determine torch dtype from precision string."""
+        """Xác định kiểu dữ liệu torch dtype từ chuỗi precision."""
         precision = (precision or "").lower()
         if DEVICE == "cpu":
             return torch.float32
@@ -200,7 +273,7 @@ class DeepfakeDetector:
     def load_model(
         self, model_source: str, model_id: str
     ) -> Tuple[Union[GenD_Train, GenD_HF, BiasConsistencyDetector, Effort, ForAda], Callable, torch.dtype]:
-        """Load and cache the deepfake detection models."""
+        """Nạp và lưu đệm các mô hình phát hiện deepfake."""
         cache_key = f"{model_source}::{model_id}::{DEVICE}"
         if cache_key in self.model_cache:
             return (
@@ -209,7 +282,7 @@ class DeepfakeDetector:
                 self.model_cache[cache_key]["dtype"],
             )
 
-        # Clear cache to free memory from previous models
+        # Xóa cache bộ nhớ GPU khi đổi mô hình
         self.model_cache.clear()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -223,13 +296,19 @@ class DeepfakeDetector:
             dtype = torch.float32
         elif model_source == "BiasConsist":
             ckpt_path = model_id or DEFAULT_BIAS_CKPT
+            if not os.path.isfile(ckpt_path):
+                ensure_weight("BiasConsist", verbose=True)
+            if not os.path.isfile(ckpt_path):
+                raise FileNotFoundError(f"Không tìm thấy checkpoint BiasConsist: {ckpt_path}")
             model = BiasConsistencyDetector.load_from_checkpoint(ckpt_path, device=DEVICE)
             preproc = model.preprocess
             dtype = torch.float32
         elif model_source == "Effort":
             ckpt_path = model_id or DEFAULT_EFFORT_CKPT
             if not os.path.isfile(ckpt_path):
-                raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+                ensure_weight("Effort", verbose=True)
+            if not os.path.isfile(ckpt_path):
+                raise FileNotFoundError(f"Không tìm thấy checkpoint Effort: {ckpt_path}")
             config = Config()
             model = Effort(config)
             model.load_checkpoint(ckpt_path)
@@ -240,7 +319,10 @@ class DeepfakeDetector:
         elif model_source == "ForAda":
             ckpt_path = model_id or DEFAULT_FORADA_CKPT
             if not os.path.isfile(ckpt_path):
-                raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+                ensure_weight("ForAda", verbose=True)
+            ensure_weight("forensics_adapter", verbose=True)
+            if not os.path.isfile(ckpt_path):
+                raise FileNotFoundError(f"Không tìm thấy checkpoint ForAda: {ckpt_path}")
             config = Config()
             model = ForAda(config)
             model.load_checkpoint(ckpt_path)
@@ -251,7 +333,7 @@ class DeepfakeDetector:
         else:
             ckpt_path = model_id
             if not os.path.isfile(ckpt_path):
-                raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+                raise FileNotFoundError(f"Không tìm thấy checkpoint cục bộ: {ckpt_path}")
 
             ckpt = torch.load(ckpt_path, map_location="cpu")
             hparams = ckpt.get("hyper_parameters", {})
@@ -270,10 +352,11 @@ class DeepfakeDetector:
         return model, preproc, dtype
 
     def load_detector(self, face_thresh: float = 0.5) -> RetinaFace:
-        """Load and cache the face detector."""
+        """Nạp và lưu đệm bộ phát hiện khuôn mặt RetinaFace."""
         face_thresh = float(face_thresh)
         if face_thresh in self.detector_cache:
             return self.detector_cache[face_thresh]
+        ensure_weight("buffalo_l", verbose=False)
         model = prepare_model(face_thresh)
         self.detector_cache[face_thresh] = model
         return model
@@ -289,7 +372,7 @@ class DeepfakeDetector:
         target_size: Optional[int] = None,
         max_faces: Optional[int] = None,
     ) -> List[Tuple[np.ndarray, float]]:
-        """Detect faces and run inference on them."""
+        """Phát hiện khuôn mặt và thực hiện suy luận dự đoán deepfake."""
         try:
             xyxy, landmarks = detector.detect(frame_bgr)
         except Exception:
@@ -298,7 +381,7 @@ class DeepfakeDetector:
         if xyxy is None or len(xyxy) == 0:
             return []
 
-        # Select faces sorted by area (largest first) when limiting
+        # Sắp xếp khuôn mặt theo diện tích từ lớn đến nhỏ
         indices = list(range(len(xyxy)))
         indices.sort(key=lambda idx: (xyxy[idx][2] - xyxy[idx][0]) * (xyxy[idx][3] - xyxy[idx][1]), reverse=True)
         if max_faces is not None:
@@ -317,7 +400,6 @@ class DeepfakeDetector:
             except Exception:
                 continue
 
-            # Convert to PIL Image
             aligned_face = cv2.cvtColor(aligned_face, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(aligned_face)
 
@@ -346,11 +428,11 @@ class DeepfakeDetector:
     def annotate_frame(
         self, frame_bgr: np.ndarray, faces: List[Tuple[np.ndarray, float]], avg_fake: Optional[float] = None
     ) -> np.ndarray:
-        """Annotate frame with bounding boxes and probabilities."""
+        """Vẽ bounding box và xác suất p_fake lên khung hình."""
         vis = frame_bgr.copy()
         for bbox, p_fake in faces:
             x1, y1, x2, y2 = map(int, bbox[:4])
-            # Interpolate color from green (p_fake=0) to red (p_fake=1)
+            # Chuyển đổi màu từ xanh lá (p_fake=0) sang đỏ (p_fake=1)
             blue = 0
             green = int(255 * (1 - p_fake))
             red = int(255 * p_fake)
@@ -371,7 +453,7 @@ class DeepfakeDetector:
 
 
 class MediaProcessor:
-    """Handles processing of images and videos."""
+    """Xử lý hình ảnh và video đầu vào."""
 
     def __init__(self, detector: DeepfakeDetector):
         self.detector = detector
@@ -389,12 +471,12 @@ class MediaProcessor:
         max_faces: Optional[int] = None,
         progress_updater: Optional[Callable[[int], None]] = None,
     ) -> Tuple[str, Dict[str, float]]:
-        """Process a single image."""
+        """Xử lý một tệp ảnh đơn lẻ."""
         try:
             img_rgb = iio.imread(img_path)
             img = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
         except Exception as e:
-            raise RuntimeError(f"Failed to read image: {img_path} ({e})")
+            raise RuntimeError(f"Không thể đọc tệp ảnh: {img_path} ({e})")
 
         faces = self.detector.infer_faces(img, detector, model, preproc, dtype, scale, target_size, max_faces)
         p_fake_vals = [pf for _, pf in faces]
@@ -432,7 +514,7 @@ class MediaProcessor:
         max_faces: Optional[int] = None,
         progress_updater: Optional[Callable[[int], None]] = None,
     ) -> Tuple[str, Dict[str, float]]:
-        """Process a video."""
+        """Xử lý một tệp video."""
         try:
             meta = iio.immeta(vid_path, plugin="pyav")
             orig_fps = float(meta.get("fps", 25.0))
@@ -477,7 +559,6 @@ class MediaProcessor:
                     running_avg = float(np.mean(p_fake_values)) if p_fake_values else 0.0
                     vis = self.detector.annotate_frame(frame, [], running_avg)
 
-                # Convert BGR to RGB for imageio
                 vis_rgb = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
                 writer.append_data(vis_rgb)
 
@@ -503,8 +584,8 @@ class MediaProcessor:
         return str(out_path), metrics
 
 
-def collect_inputs(files, folder_path: str) -> List[str]:
-    """Collect valid media file paths from uploads and folder."""
+def collect_inputs(files, folder_path: str = None) -> List[str]:
+    """Thu thập danh sách đường dẫn tệp media hợp lệ."""
     paths: List[str] = []
     if files:
         for f in files:
@@ -518,7 +599,7 @@ def collect_inputs(files, folder_path: str) -> List[str]:
             for ext in sorted(VIDEO_EXTS.union(IMAGE_EXTS)):
                 paths.extend(str(p) for p in root.rglob(f"*{ext}"))
 
-    # Deduplicate and sort
+    # Loại bỏ trùng lặp và giữ thứ tự
     seen = set()
     dedup = []
     for p in paths:
@@ -540,7 +621,6 @@ DETECTOR = DeepfakeDetector()
 
 
 def run_inference(
-    lang: str,
     model_source: str,
     gend_model: str,
     bias_ckpt: str,
@@ -548,7 +628,6 @@ def run_inference(
     forada_ckpt: str,
     local_ckpt: str,
     files,
-    # folder_path: str,
     face_thresh: float,
     stride: int,
     max_frames: int,
@@ -557,8 +636,8 @@ def run_inference(
     max_faces: int,
     progress: gr.Progress = gr.Progress(track_tqdm=True),
 ):
-    """Main inference function for Gradio."""
-    t = TRANSLATIONS.get(lang, TRANSLATIONS["English"])
+    """Hàm suy luận chính thực thi cho giao diện Gradio."""
+    t = UI_TEXT
 
     if target_size == -1:
         target_size = None
@@ -566,7 +645,7 @@ def run_inference(
     detector_obj = DETECTOR
     processor = MediaProcessor(detector_obj)
 
-    print("Loading model...")
+    print("[BiasConsist] Đang tải mô hình...")
     yield (
         pd.DataFrame(columns=TABLE_HEADERS),
         t["status_loading_model"],
@@ -590,14 +669,14 @@ def run_inference(
     except FileNotFoundError as e:
         yield (
             pd.DataFrame(columns=TABLE_HEADERS),
-            f"**Notice: Model Checkpoint Not Found** — `{str(e)}`\n\n"
-            f"> **Tip**: You can select **GenD** under *Model Architecture* to test immediately (weights download automatically from Hugging Face), or place the checkpoint file in `{model_id}`.",
+            f"**Thông báo: Không tìm thấy checkpoint mô hình** — `{str(e)}`\n\n"
+            f"> **Mẹo**: Bạn có thể chọn **GenD** trong mục *Kiến trúc mô hình* để kiểm thử ngay lập tức (trọng số tự động tải từ Hugging Face), hoặc đặt tệp checkpoint vào `{model_id}`.",
             None,
             None,
         )
         return
 
-    print("Loading face detector...")
+    print("[BiasConsist] Đang khởi tạo detector RetinaFace...")
     yield (
         pd.DataFrame(columns=TABLE_HEADERS),
         t["status_loading_detector"],
@@ -606,7 +685,7 @@ def run_inference(
     )
     detector = detector_obj.load_detector(face_thresh)
 
-    print("Collecting inputs...")
+    print("[BiasConsist] Thu thập danh sách tệp đầu vào...")
     yield (
         pd.DataFrame(columns=TABLE_HEADERS),
         t["status_collecting_inputs"],
@@ -625,8 +704,7 @@ def run_inference(
         )
         return
 
-    # Calculate total progress units (frames for videos, 1 for images)
-    print("Calculating total progress...")
+    print("[BiasConsist] Tính toán tổng số frame cần xử lý...")
     yield (
         pd.DataFrame(columns=TABLE_HEADERS),
         t["status_calculating_progress"],
@@ -649,7 +727,6 @@ def run_inference(
                 total_progress_units += 1
 
     total_progress_units = max(1, total_progress_units)
-
     current_progress = 0
 
     def advance_progress(step: int = 1) -> None:
@@ -662,7 +739,7 @@ def run_inference(
         )
 
     progress(0.0, desc=t["progress_desc"].format(current=0, total=total_progress_units))
-    print("Starting inference...")
+    print("[BiasConsist] Bắt đầu xử lý phát hiện deepfake...")
     yield (
         pd.DataFrame(columns=TABLE_HEADERS),
         t["status_starting_inference"],
@@ -673,7 +750,6 @@ def run_inference(
     out_dir = OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Setup directories
     inputs_dir = OUTPUT_DIR / "inputs"
     outputs_dir = OUTPUT_DIR / "outputs"
     inputs_dir.mkdir(parents=True, exist_ok=True)
@@ -684,7 +760,6 @@ def run_inference(
     processed_inputs = []
 
     for idx, p in enumerate(inputs):
-        # Copy input to inputs_dir
         try:
             p_path = Path(p)
             unique_name = f"{p_path.stem}_{uuid.uuid4().hex[:8]}{p_path.suffix}"
@@ -692,7 +767,7 @@ def run_inference(
             shutil.copy2(p, new_input_path)
             p = str(new_input_path)
         except Exception as e:
-            print(f"Failed to copy input {p}: {e}")
+            print(f"Lỗi khi sao chép tệp đầu vào {p}: {e}")
 
         processed_inputs.append(p)
 
@@ -732,7 +807,7 @@ def run_inference(
             output_files.append(out_p)
 
         except Exception as e:
-            print(f"Error processing {p}: {e}")
+            print(f"Lỗi khi xử lý {p}: {e}")
             rows.append(
                 {
                     "input": p,
@@ -749,13 +824,13 @@ def run_inference(
     if not df.empty and "input" in df.columns:
         df = df.sort_values("input").reset_index(drop=True)
 
-    # Log to CSV
+    # Ghi nhật ký vào CSV
     log_file = OUTPUT_DIR / "inference_log.csv"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     write_header = not log_file.exists()
     df.to_csv(log_file, mode="a", header=write_header, index=False)
 
-    # Prepare display DataFrame
+    # Chuẩn bị DataFrame hiển thị
     display_df = df.copy()
     labels = []
     scores_avg = []
@@ -768,7 +843,6 @@ def run_inference(
         if "error" in display_df.columns:
             display_df = display_df.drop(columns=["error"])
 
-        # Determine predictions and ground-truth labels
         predictions = []
         ground_truths = []
         results = []
@@ -798,82 +872,38 @@ def run_inference(
         display_df["ground_truth"] = ground_truths
         display_df["result"] = results
 
-        # Format numeric columns for clean viewing
         if "avg_p_fake" in display_df.columns:
-            display_df["avg_p_fake"] = display_df["avg_p_fake"].apply(lambda v: f"{float(v):.4f}" if pd.notnull(v) else "0.0000")
+            display_df["avg_p_fake"] = display_df["avg_p_fake"].apply(
+                lambda v: f"{float(v):.4f}" if pd.notnull(v) else "0.0000"
+            )
         if "median_p_fake" in display_df.columns:
-            display_df["median_p_fake"] = display_df["median_p_fake"].apply(lambda v: f"{float(v):.4f}" if pd.notnull(v) else "0.0000")
+            display_df["median_p_fake"] = display_df["median_p_fake"].apply(
+                lambda v: f"{float(v):.4f}" if pd.notnull(v) else "0.0000"
+            )
         if "num_frames" in display_df.columns:
-            display_df["num_frames"] = display_df["num_frames"].apply(lambda v: str(int(v)) if pd.notnull(v) else "0")
+            display_df["num_frames"] = display_df["num_frames"].apply(
+                lambda v: str(int(v)) if pd.notnull(v) else "0"
+            )
         if "num_faces" in display_df.columns:
-            display_df["num_faces"] = display_df["num_faces"].apply(lambda v: str(int(v)) if pd.notnull(v) else "0")
+            display_df["num_faces"] = display_df["num_faces"].apply(
+                lambda v: str(int(v)) if pd.notnull(v) else "0"
+            )
 
     final_status = f"{t['status_complete']}\n\n"
-    summary = []
-    if not df.empty and "avg_p_fake" in df.columns:
-        overall_avg = float(df["avg_p_fake"].mean())
-        overall_med = float(df["median_p_fake"].median())
-        summary.append(t["summary_overview"].format(count=len(df), avg=overall_avg, med=overall_med))
+    if not display_df.empty:
+        file_reports = []
+        for idx, row in display_df.iterrows():
+            fname = row.get("input", "")
+            avg_f = row.get("avg_p_fake", "0.0000")
+            pred = row.get("prediction", "")
+            file_reports.append(f"- **{fname}**: `avg_fake = {avg_f}` ({pred})")
+        final_status += "\n".join(file_reports)
 
-        # Video AUC & EER Evaluation
-        if len(labels) >= 2 and len(set(labels)) == 2:
-            auc_avg, _, _, _ = calculate_video_auc(labels, scores_avg)
-            auc_med, _, _, _ = calculate_video_auc(labels, scores_med)
-            y_score_2d = np.column_stack([1.0 - np.array(scores_avg), np.array(scores_avg)])
-            eer_avg = calculate_eer(labels, y_score_2d)
-            num_real = sum(1 for l in labels if l == 0)
-            num_fake = sum(1 for l in labels if l == 1)
-
-            # Append prominent summary row to Table
-            summary_row = {
-                "input": t["table_summary_row"],
-                "num_frames": f"{len(df)} files",
-                "num_faces": "-",
-                "avg_p_fake": f"AUC={auc_avg:.4f}",
-                "median_p_fake": f"AUC={auc_med:.4f}",
-                "prediction": f"EER={eer_avg:.4f}",
-                "ground_truth": f"{num_real}R / {num_fake}F",
-                "result": f"AUC: {auc_avg:.2%}",
-            }
-            display_df = pd.concat([display_df, pd.DataFrame([summary_row])], ignore_index=True)
-
-            summary.append(
-                f"{t['auc_title']}\n"
-                f"{t['auc_mean'].format(auc=auc_avg, pct=auc_avg*100)}\n"
-                f"{t['auc_median'].format(auc=auc_med, pct=auc_med*100)}\n"
-                f"{t['eer_text'].format(eer=eer_avg, pct=eer_avg*100)}\n"
-                f"{t['auc_details'].format(count=len(labels), real=num_real, fake=num_fake)}"
-            )
-        elif len(labels) > 0 and len(set(labels)) < 2:
-            current_cls = "FAKE (1)" if labels[0] == 1 else "REAL (0)"
-            info_row = {
-                "input": t["table_info_row"],
-                "num_frames": f"{len(df)} files",
-                "num_faces": "-",
-                "avg_p_fake": t["need_two_classes"],
-                "median_p_fake": t["real_and_fake"],
-                "prediction": "-",
-                "ground_truth": t["current_has"].format(cls=current_cls),
-                "result": t["need_rf"],
-            }
-            display_df = pd.concat([display_df, pd.DataFrame([info_row])], ignore_index=True)
-
-            summary.append(
-                f"{t['auc_info_title']}\n"
-                f"{t['auc_info_p1'].format(count=len(labels), cls=current_cls)}\n"
-                f"{t['auc_info_p2']}\n"
-                f"{t['auc_info_p3']}"
-            )
-
-    # Reorder columns to match TABLE_HEADERS strictly
     display_df = display_df[[col for col in TABLE_HEADERS if col in display_df.columns]]
-
-    if summary:
-        final_status += "\n\n".join(summary)
 
     progress(1.0, desc=t["progress_desc"].format(current=total_progress_units, total=total_progress_units))
 
-    print("Inference complete!")
+    print("[BiasConsist] Hoàn tất suy luận!")
     yield (
         display_df,
         final_status,
@@ -882,17 +912,8 @@ def run_inference(
     )
 
 
-def get_thumbnail(path: str) -> Optional[str]:
-    """Get thumbnail image path for preview (image itself or first frame of video)."""
-    if is_image(path):
-        return path
-    if is_video(path):
-        return path
-    return None
-
-
-def get_all_inputs(files, folder_path):
-    """Get all input paths for preview."""
+def get_all_inputs(files, folder_path=None):
+    """Thu thập toàn bộ đường dẫn đầu vào cho khung xem trước."""
     return collect_inputs(files, folder_path)
 
 
@@ -937,7 +958,7 @@ CUSTOM_THEME = gr.themes.Soft(
 )
 
 CUSTOM_CSS = """
-/* Typography & System Font */
+/* Typography & Hệ thống Phông chữ */
 *, *::before, *::after {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Lato, Helvetica, Arial, sans-serif !important;
 }
@@ -954,14 +975,13 @@ body, .gradio-container {
     padding: 16px 28px !important;
 }
 
-/* Headings */
 h1, h2, h3, h4 {
     color: #0F172A !important;
     letter-spacing: -0.015em !important;
     margin-top: 0 !important;
 }
 
-/* Top Navbar Strip */
+/* Thanh Navbar trên cùng */
 .top-navbar {
     background-color: #FFFFFF !important;
     border: 1px solid #E2E8F0 !important;
@@ -1013,85 +1033,32 @@ h1, h2, h3, h4 {
     text-transform: uppercase !important;
 }
 
+.status-pill {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    background: #ECFDF5 !important;
+    color: #059669 !important;
+    padding: 5px 12px !important;
+    border-radius: 9999px !important;
+    border: 1px solid #A7F3D0 !important;
+    letter-spacing: 0.02em !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+}
+
 .brand-markdown p {
     font-size: 0.82rem !important;
     color: #64748B !important;
     margin: 2px 0 0 0 !important;
 }
 
-/* Navbar Language Selector: Sleek Flat Segmented Control [ EN | VI ] */
-.nav-lang-toggle {
-    background: #F1F5F9 !important;
-    border: 1px solid #E2E8F0 !important;
-    border-radius: 8px !important;
-    padding: 2px !important;
-    display: inline-flex !important;
-    width: auto !important;
-    min-width: unset !important;
-    margin: 0 !important;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03) !important;
-}
-
-.nav-lang-toggle > .wrap,
-.nav-lang-toggle .wrap {
-    display: inline-flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    gap: 2px !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: auto !important;
-}
-
-.nav-lang-toggle input[type="radio"] {
-    display: none !important;
-}
-
-.nav-lang-toggle label {
-    padding: 4px 12px !important;
-    border-radius: 6px !important;
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.04em !important;
-    cursor: pointer !important;
-    border: none !important;
-    background: transparent !important;
-    color: #64748B !important;
-    transition: all 0.15s ease !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    min-width: 38px !important;
-    text-align: center !important;
-    margin: 0 !important;
-    line-height: 1.25 !important;
-    user-select: none !important;
-    box-shadow: none !important;
-}
-
-.nav-lang-toggle label:hover {
-    color: #0F172A !important;
-    background-color: rgba(255, 255, 255, 0.6) !important;
-}
-
-.nav-lang-toggle label.selected {
-    background-color: #FFFFFF !important;
-    color: #4F46E5 !important;
-    font-weight: 700 !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
-}
-
-.nav-lang-toggle label span {
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-/* Main Layout Row */
+/* Bố cục chính */
 .main-layout-row {
     gap: 20px !important;
 }
 
-/* Left Sidebar Panel: Seamless White Container */
+/* Cột bên trái: Sidebar cấu hình */
 .sidebar-panel {
     background-color: #FFFFFF !important;
     border: 1px solid #E2E8F0 !important;
@@ -1103,7 +1070,6 @@ h1, h2, h3, h4 {
     gap: 16px !important;
 }
 
-/* Remove Card-in-Card nesting inside sidebar */
 .sidebar-panel .block,
 .sidebar-panel fieldset,
 .sidebar-panel .gr-group,
@@ -1134,7 +1100,7 @@ h1, h2, h3, h4 {
     margin: 0 !important;
 }
 
-/* Inputs, Textboxes, Dropdowns */
+/* Ô nhập liệu, danh sách chọn */
 input, textarea, select, .gr-input {
     background-color: #FFFFFF !important;
     border: 1px solid #CBD5E1 !important;
@@ -1152,12 +1118,10 @@ input:focus, textarea:focus, select:focus {
     outline: none !important;
 }
 
-/* Sidebar Dropdown */
 .sidebar-dropdown {
     margin-bottom: 14px !important;
 }
 
-/* Sidebar File Upload */
 .sidebar-file-upload {
     border: 1px dashed #CBD5E1 !important;
     border-radius: 10px !important;
@@ -1171,7 +1135,7 @@ input:focus, textarea:focus, select:focus {
     background-color: #EEF2FF !important;
 }
 
-/* Primary Run Button in Sidebar */
+/* Nút chạy phân tích chính */
 .sidebar-run-btn {
     width: 100% !important;
     background: #4F46E5 !important;
@@ -1196,7 +1160,6 @@ input:focus, textarea:focus, select:focus {
     transform: translateY(0) !important;
 }
 
-/* Sidebar Accordion */
 .sidebar-accordion {
     border: 1px solid #E2E8F0 !important;
     border-radius: 10px !important;
@@ -1213,14 +1176,14 @@ input:focus, textarea:focus, select:focus {
     border-bottom: 1px solid #E2E8F0 !important;
 }
 
-/* Main Stage Column */
+/* Cột bên phải: Sân khấu chính hiển thị kết quả */
 .main-stage-column {
     display: flex !important;
     flex-direction: column !important;
     gap: 16px !important;
 }
 
-/* Status Alert Strip */
+/* Thanh trạng thái hệ thống */
 .status-strip {
     background-color: #FFFFFF !important;
     border: 1px solid #E2E8F0 !important;
@@ -1239,7 +1202,7 @@ input:focus, textarea:focus, select:focus {
     color: #0F172A !important;
 }
 
-/* Preview Row & Galleries: Fixed height control (390px) to prevent vertical ballooning */
+/* Hàng xem trước ảnh / video */
 .preview-row {
     gap: 16px !important;
 }
@@ -1257,7 +1220,6 @@ input:focus, textarea:focus, select:focus {
     flex-direction: column !important;
 }
 
-/* Override Gradio large-screen min-height: 450px rule */
 .preview-gallery .fixed-height {
     min-height: unset !important;
     height: 100% !important;
@@ -1281,7 +1243,6 @@ input:focus, textarea:focus, select:focus {
     justify-content: center !important;
 }
 
-/* Strict constraint on portrait images and 9:16 vertical videos */
 .preview-gallery img,
 .preview-gallery video {
     max-height: 320px !important;
@@ -1295,7 +1256,7 @@ input:focus, textarea:focus, select:focus {
     max-height: 55px !important;
 }
 
-/* Results Panel Card */
+/* Thẻ kết quả phân tích */
 .results-card {
     background-color: #FFFFFF !important;
     border: 1px solid #E2E8F0 !important;
@@ -1345,23 +1306,75 @@ input:focus, textarea:focus, select:focus {
     border-color: #CBD5E1 !important;
 }
 
-/* Modern Dataframe / Table: Single clean horizontal scrollbar, no double scrollbar */
-.modern-table,
-.gradio-dataframe {
+/* =====================================================================================
+   SỬA LỖI 2 THANH CUỘN NGANG (DUPLICATE HORIZONTAL SCROLLBAR FIX)
+   - Khung bao ngoài (.modern-table) ẩn hoàn toàn overflow thừa
+   - Chỉ duy nhất lớp .table-wrap được phép cuộn ngang (overflow-x: auto)
+   - Triệt tiêu scrollbar lồng nhau bên trong ở thẻ <table> và <tbody>
+   ===================================================================================== */
+.modern-table {
     border: 1px solid #E2E8F0 !important;
     border-radius: 10px !important;
     background: #FFFFFF !important;
-    overflow-x: hidden !important;
     max-width: 100% !important;
+    overflow: hidden !important;
 }
 
-/* Ẩn bớt thanh cuộn lồng nhau của Gradio Dataframe, chỉ cuộn ở lớp table-wrap */
+/* Chỉ duy nhất phần tử .table-wrap làm thanh cuộn ngang */
 .modern-table .table-wrap,
-.gradio-dataframe .table-wrap,
-.dataframe-wrap {
+.modern-table .table-container,
+.modern-table .dataframe-wrap {
     overflow-x: auto !important;
+    overflow-y: hidden !important;
     max-width: 100% !important;
     scrollbar-width: thin !important;
+    scrollbar-color: #CBD5E1 #F8FAFC !important;
+}
+
+/* Vô hiệu hóa và ẩn hoàn toàn thanh cuộn ở các thẻ table, tbody, thead bên trong */
+.modern-table table,
+.modern-table tbody,
+.modern-table thead,
+.modern-table tr,
+.gradio-dataframe table,
+.gradio-dataframe tbody {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.modern-table table::-webkit-scrollbar,
+.modern-table tbody::-webkit-scrollbar,
+.modern-table thead::-webkit-scrollbar,
+.modern-table tr::-webkit-scrollbar,
+.gradio-dataframe table::-webkit-scrollbar,
+.gradio-dataframe tbody::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+}
+
+/* Tùy chỉnh thanh cuộn ngang mượt mà cho .table-wrap */
+.modern-table .table-wrap::-webkit-scrollbar {
+    display: block !important;
+    height: 6px !important;
+}
+
+.modern-table .table-wrap::-webkit-scrollbar-track {
+    background: #F8FAFC !important;
+    border-radius: 4px !important;
+}
+
+.modern-table .table-wrap::-webkit-scrollbar-thumb {
+    background-color: #CBD5E1 !important;
+    border-radius: 4px !important;
+}
+
+.modern-table .table-wrap::-webkit-scrollbar-thumb:hover {
+    background-color: #94A3B8 !important;
 }
 
 .modern-table table,
@@ -1379,7 +1392,6 @@ table {
     width: 100% !important;
 }
 
-/* Prevent headers and cells from truncating with ellipsis */
 th, td,
 .modern-table th,
 .modern-table td {
@@ -1387,7 +1399,6 @@ th, td,
     min-width: 110px !important;
 }
 
-/* Extra space for input media path/filename */
 th:first-child, td:first-child,
 .modern-table th:first-child,
 .modern-table td:first-child {
@@ -1421,108 +1432,78 @@ th:first-child, td:first-child,
 .modern-table tr:hover td {
     background-color: #F8FAFC !important;
 }
-
-/* Làm nổi bật dòng tổng kết [VIDEO AUC SUMMARY] ở cuối bảng */
-.modern-table tbody tr:last-child td,
-.gradio-dataframe tbody tr:last-child td {
-    background-color: #EEF2FF !important;
-    color: #312E81 !important;
-    font-weight: 700 !important;
-    border-top: 2px solid #C7D2FE !important;
-    border-bottom: 2px solid #C7D2FE !important;
-}
-
-.modern-table tbody tr:last-child:hover td,
-.gradio-dataframe tbody tr:last-child:hover td {
-    background-color: #E0E7FF !important;
-}
-
-.modern-table tbody tr:last-child td:first-child,
-.gradio-dataframe tbody tr:last-child td:first-child {
-    color: #4338CA !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.02em !important;
-}
 """
 
 
 def build_ui():
-    """Build the Gradio interface."""
-    t_en = TRANSLATIONS["English"]
+    """Khởi tạo toàn bộ giao diện Gradio bằng Tiếng Việt."""
+    t = UI_TEXT
 
-    with gr.Blocks(title="BiasConsist - Deepfake Detection & Benchmark Platform", theme=CUSTOM_THEME, css=CUSTOM_CSS) as demo:
-        # Top Navigation Bar: Seamless white strip with brand and compact language switch
+    with gr.Blocks(title="BiasConsist - Nền tảng Đánh giá & Phát hiện Deepfake", theme=CUSTOM_THEME, css=CUSTOM_CSS) as demo:
+        # Thanh điều hướng phía trên
         with gr.Row(elem_classes=["top-navbar"]):
             with gr.Column(scale=10, elem_classes=["navbar-brand"]):
-                app_title_md = gr.Markdown(
-                    f"<h1>BiasConsist <span class='badge'>{t_en['app_badge']}</span></h1><p>{t_en['app_subtitle']}</p>",
+                gr.Markdown(
+                    f"<h1>BiasConsist <span class='badge'>{t['app_badge']}</span></h1><p>{t['app_subtitle']}</p>",
                     elem_classes=["brand-markdown"],
                 )
-            with gr.Column(scale=2, min_width=90, elem_classes=["navbar-actions"]):
-                lang_radio = gr.Radio(
-                    choices=["EN", "VI"],
-                    value="EN",
-                    label="Language",
-                    show_label=False,
-                    container=False,
-                    elem_classes=["nav-lang-toggle"],
-                )
+            with gr.Column(scale=2, min_width=140, elem_classes=["navbar-actions"]):
+                gr.Markdown("<span class='status-pill'>⚡ Hệ thống sẵn sàng</span>", elem_classes=["brand-markdown"])
 
         with gr.Row(elem_classes=["main-layout-row"]):
-            # ================= LEFT COLUMN: Unified Sidebar (White, Seamless, No Card-in-Card) =================
+            # ================= CỘT TRÁI: SIDEBAR CẤU HÌNH =================
             with gr.Column(scale=4, min_width=360, elem_classes=["sidebar-panel"]):
-                sidebar_title = gr.Markdown(f"### {t_en['sidebar_config_title']}", elem_classes=["sidebar-section-title"])
+                gr.Markdown(f"### {t['sidebar_config_title']}", elem_classes=["sidebar-section-title"])
 
                 model_source = gr.Dropdown(
-                    ["BiasConsist", "GenD", "Effort", "ForAda", "Local Checkpoint"],
-                    label=t_en["model_source_label"],
+                    ["BiasConsist", "GenD", "Effort", "ForAda", "Checkpoint cục bộ"],
+                    label=t["model_source_label"],
                     value="BiasConsist",
                     interactive=True,
                     elem_classes=["sidebar-dropdown"],
                 )
 
                 files = gr.Files(
-                    label=t_en["upload_label"],
+                    label=t["upload_label"],
                     file_count="multiple",
                     file_types=["video", "image", ".mp4", ".avi", ".mov", ".mkv", ".webm", ".jpg", ".jpeg", ".png", ".bmp", ".webp"],
                     elem_classes=["sidebar-file-upload"],
                 )
 
-                # Action Button: Primary Indigo, right beneath file upload
+                # Nút thực hiện phát hiện
                 run_btn = gr.Button(
-                    t_en["run_btn"],
+                    t["run_btn"],
                     variant="primary",
                     size="lg",
                     elem_classes=["sidebar-run-btn"],
                 )
 
-                # Advanced Settings: Collapsible, holds Checkpoints and Threshold sliders
-                with gr.Accordion(t_en["advanced_settings"], open=False, elem_classes=["sidebar-accordion"]) as advanced_accordion:
-                    # Model Checkpoint Textboxes (Moved here out of main view!)
-                    bias_ckpt = gr.Textbox(label=t_en["bias_ckpt_label"], value=DEFAULT_BIAS_CKPT, visible=True)
-                    gend_model = gr.Dropdown(GEND_MODELS, label=t_en["gend_model_label"], value=GEND_MODELS[0], visible=False)
-                    effort_ckpt = gr.Textbox(label=t_en["effort_ckpt_label"], value=DEFAULT_EFFORT_CKPT, visible=False)
-                    forada_ckpt = gr.Textbox(label=t_en["forada_ckpt_label"], value=DEFAULT_FORADA_CKPT, visible=False)
-                    local_ckpt = gr.Textbox(label=t_en["local_ckpt_label"], value=DEFAULT_CKPT, visible=False)
+                # Cài đặt nâng cao (ẩn các đường dẫn checkpoint và thanh trượt ngưỡng)
+                with gr.Accordion(t["advanced_settings"], open=False, elem_classes=["sidebar-accordion"]):
+                    bias_ckpt = gr.Textbox(label=t["bias_ckpt_label"], value=DEFAULT_BIAS_CKPT, visible=True)
+                    gend_model = gr.Dropdown(GEND_MODELS, label=t["gend_model_label"], value=GEND_MODELS[0], visible=False)
+                    effort_ckpt = gr.Textbox(label=t["effort_ckpt_label"], value=DEFAULT_EFFORT_CKPT, visible=False)
+                    forada_ckpt = gr.Textbox(label=t["forada_ckpt_label"], value=DEFAULT_FORADA_CKPT, visible=False)
+                    local_ckpt = gr.Textbox(label=t["local_ckpt_label"], value=DEFAULT_CKPT, visible=False)
 
-                    face_thresh = gr.Slider(0.1, 0.9, value=0.5, step=0.05, label=t_en["face_thresh_label"])
-                    scale = gr.Slider(1.0, 2.0, value=1.3, step=0.05, label=t_en["scale_label"])
-                    target_size = gr.Number(value=-1, precision=0, label=t_en["target_size_label"])
-                    stride = gr.Slider(1, 10, value=1, step=1, label=t_en["stride_label"])
-                    max_frames = gr.Number(value=-1, precision=0, label=t_en["max_frames_label"])
-                    max_faces = gr.Slider(1, 10, value=1, step=1, label=t_en["max_faces_label"])
+                    face_thresh = gr.Slider(0.1, 0.9, value=0.5, step=0.05, label=t["face_thresh_label"])
+                    scale = gr.Slider(1.0, 2.0, value=1.3, step=0.05, label=t["scale_label"])
+                    target_size = gr.Number(value=-1, precision=0, label=t["target_size_label"])
+                    stride = gr.Slider(1, 10, value=1, step=1, label=t["stride_label"])
+                    max_frames = gr.Number(value=-1, precision=0, label=t["max_frames_label"])
+                    max_faces = gr.Slider(1, 10, value=1, step=1, label=t["max_faces_label"])
 
-            # ================= RIGHT COLUMN: Main Stage (Preview & Results) =================
+            # ================= CỘT PHẢI: HIỂN THỊ KẾT QUẢ & XEM TRƯỚC =================
             with gr.Column(scale=8, min_width=580, elem_classes=["main-stage-column"]):
-                # Compact Status Alert Strip
+                # Dải thông báo trạng thái hệ thống
                 with gr.Group(elem_classes=["status-strip"]):
-                    status_summary = gr.Markdown(t_en["status_ready"])
+                    status_summary = gr.Markdown(t["status_ready"])
 
-                # Preview Galleries with Integrated Native Headers
+                # Hàng khung xem trước
                 with gr.Row(elem_classes=["preview-row"]):
                     with gr.Column(scale=1):
                         input_gallery = gr.Gallery(
-                            label=t_en["input_preview_label"],
+                            label=t["input_preview_label"],
                             show_label=True,
                             columns=1,
                             object_fit="contain",
@@ -1533,7 +1514,7 @@ def build_ui():
                         )
                     with gr.Column(scale=1):
                         output_gallery = gr.Gallery(
-                            label=t_en["output_preview_label"],
+                            label=t["output_preview_label"],
                             show_label=True,
                             columns=1,
                             object_fit="contain",
@@ -1543,13 +1524,13 @@ def build_ui():
                             elem_classes=["preview-gallery"],
                         )
 
-                # Results Panel
+                # Bảng kết quả phân tích & chỉ số Video AUROC
                 with gr.Column(elem_classes=["results-card"]):
                     with gr.Row(elem_classes=["results-header-row"]):
-                        results_title = gr.Markdown(f"### {t_en['results_title']}", elem_classes=["results-title-text"])
+                        gr.Markdown(f"### {t['results_title']}", elem_classes=["results-title-text"])
                         with gr.Row(elem_classes=["results-btn-group"]):
-                            copy_btn = gr.Button(t_en["copy_btn"], size="sm", elem_classes=["table-action-btn"])
-                            export_btn = gr.Button(t_en["export_btn"], size="sm", elem_classes=["table-action-btn"])
+                            copy_btn = gr.Button(t["copy_btn"], size="sm", elem_classes=["table-action-btn"])
+                            export_btn = gr.Button(t["export_btn"], size="sm", elem_classes=["table-action-btn"])
 
                     table = gr.Dataframe(
                         value=pd.DataFrame(columns=TABLE_HEADERS),
@@ -1560,64 +1541,7 @@ def build_ui():
                         elem_classes=["modern-table"],
                     )
 
-        def change_language(lang):
-            t = TRANSLATIONS.get(lang, TRANSLATIONS["English"])
-            return (
-                f"<h1>BiasConsist <span class='badge'>{t['app_badge']}</span></h1><p>{t['app_subtitle']}</p>",
-                f"### {t['sidebar_config_title']}",
-                gr.update(label=t["model_source_label"]),
-                gr.update(label=t["bias_ckpt_label"]),
-                gr.update(label=t["gend_model_label"]),
-                gr.update(label=t["effort_ckpt_label"]),
-                gr.update(label=t["forada_ckpt_label"]),
-                gr.update(label=t["local_ckpt_label"]),
-                gr.update(label=t["upload_label"]),
-                gr.update(label=t["advanced_settings"], open=False),
-                gr.update(label=t["face_thresh_label"]),
-                gr.update(label=t["scale_label"]),
-                gr.update(label=t["target_size_label"]),
-                gr.update(label=t["stride_label"]),
-                gr.update(label=t["max_frames_label"]),
-                gr.update(label=t["max_faces_label"]),
-                gr.update(value=t["run_btn"]),
-                t["status_ready"],
-                gr.update(label=t["input_preview_label"]),
-                gr.update(label=t["output_preview_label"]),
-                f"### {t['results_title']}",
-                gr.update(value=t["copy_btn"]),
-                gr.update(value=t["export_btn"]),
-            )
-
-        lang_radio.change(
-            fn=change_language,
-            inputs=lang_radio,
-            outputs=[
-                app_title_md,
-                sidebar_title,
-                model_source,
-                bias_ckpt,
-                gend_model,
-                effort_ckpt,
-                forada_ckpt,
-                local_ckpt,
-                files,
-                advanced_accordion,
-                face_thresh,
-                scale,
-                target_size,
-                stride,
-                max_frames,
-                max_faces,
-                run_btn,
-                status_summary,
-                input_gallery,
-                output_gallery,
-                results_title,
-                copy_btn,
-                export_btn,
-            ],
-        )
-
+        # Sao chép bảng vào Clipboard
         copy_btn.click(
             fn=None,
             inputs=[table],
@@ -1634,6 +1558,7 @@ def build_ui():
             }""",
         )
 
+        # Xuất dữ liệu bảng sang file CSV
         export_btn.click(
             fn=None,
             inputs=[table],
@@ -1650,7 +1575,7 @@ def build_ui():
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'results.csv';
+                a.download = 'ket_qua_danh_gia.csv';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -1663,7 +1588,7 @@ def build_ui():
                 gr.update(visible=(source == "GenD")),
                 gr.update(visible=(source == "Effort")),
                 gr.update(visible=(source == "ForAda")),
-                gr.update(visible=(source == "Local Checkpoint")),
+                gr.update(visible=(source in ("Checkpoint cục bộ", "Local Checkpoint"))),
             )
 
         model_source.change(
@@ -1675,7 +1600,6 @@ def build_ui():
         run_btn.click(
             fn=run_inference,
             inputs=[
-                lang_radio,
                 model_source,
                 gend_model,
                 bias_ckpt,
@@ -1683,7 +1607,6 @@ def build_ui():
                 forada_ckpt,
                 local_ckpt,
                 files,
-                # folder,
                 face_thresh,
                 stride,
                 max_frames,
@@ -1699,28 +1622,23 @@ def build_ui():
             ],
         )
 
-        # Update input preview on change
-        def update_previews(files_in, folder_in=None):
-            return get_all_inputs(files_in, folder_in)
+        def update_previews(files_in):
+            return get_all_inputs(files_in)
 
         files.change(
             fn=update_previews,
-            inputs=[
-                files,
-                # folder,
-            ],
+            inputs=[files],
             outputs=input_gallery,
         )
-        # folder.change(fn=update_previews, inputs=[files, folder], outputs=input_gallery)
 
     return demo
 
 
 if __name__ == "__main__":
+    check_and_download_all_weights()
     ui = build_ui()
     returns = ui.launch(
         server_name="0.0.0.0",
         server_port=int(os.environ.get("PORT", 7860)),
-        #share=True,
     )
-    print("Gradio UI launched. Returns:", returns)
+    print("[BiasConsist] Giao diện Gradio đã khởi chạy tại:", returns)

@@ -1,5 +1,8 @@
 import os
-from typing import override
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
 
 import cv2
 import numpy as np

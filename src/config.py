@@ -1,5 +1,10 @@
 from enum import Enum
-from typing import Literal, Self
+from typing import Literal
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from pydantic import BaseModel as Validation
 from pydantic import field_validator
